@@ -5,7 +5,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.support.annotation.RequiresApi;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -24,6 +27,8 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.ListView;
 import android.widget.MediaController.MediaPlayerControl;
+import android.widget.SeekBar;
+import android.widget.TextView;
 
 public class MainActivity extends AppCompatActivity implements MediaPlayerControl{
 
@@ -32,13 +37,18 @@ public class MainActivity extends AppCompatActivity implements MediaPlayerContro
     private MusicService musicSrv;
     private Intent playIntent;
     private boolean musicBound=false;
+    private MusicController controller;
+
+    private TextView mTextDuration;
+    private TextView mTextSeekto;
+    private SeekBar mSeekbarAudio;
+    private boolean mUserIsSeeking = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
         checkAndRequestPermissions();
+        setContentView(R.layout.activity_main);
 
         songView = findViewById(R.id.song_list);
         songList = new ArrayList<Song>();
@@ -53,6 +63,29 @@ public class MainActivity extends AppCompatActivity implements MediaPlayerContro
 
         SongAdapter songAdt = new SongAdapter(this, songList);
         songView.setAdapter(songAdt);
+        setController();
+        initializeUI();
+        initializeSeekbar();
+    }
+
+    private void setController(){
+        //set the controller up
+        controller = new MusicController(this);
+        controller.setPrevNextListeners(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                playNext();
+            }
+        }, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                playPrev();
+            }
+        });
+        controller.setMediaPlayer(this);
+        controller.setAnchorView(findViewById(R.id.song_list));
+        controller.setEnabled(true);
+
     }
 
     // xin quyen
@@ -104,9 +137,13 @@ public class MainActivity extends AppCompatActivity implements MediaPlayerContro
         }
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.N)
     public void songPicked(View view){
         musicSrv.setSong(Integer.parseInt(view.getTag().toString()));
         musicSrv.playSong();
+        mSeekbarAudio.setMax(getDuration()*1000);
+        mTextDuration.setText(getDuration()*1000+"");
+        mTextSeekto.setText("00:00");
     }
 
 
@@ -168,31 +205,39 @@ public class MainActivity extends AppCompatActivity implements MediaPlayerContro
 
     @Override
     public void start() {
-
+        musicSrv.go();
     }
 
     @Override
     public void pause() {
-
+        musicSrv.pausePlayer();
     }
 
     @Override
     public int getDuration() {
-        return 0;
+        return musicSrv.getDur();
     }
 
     @Override
     public int getCurrentPosition() {
-        return 0;
+        if(musicSrv!=null && musicBound && musicSrv.isPng()){
+            return musicSrv.getPosn();
+
+        }
+        else return 0;
     }
 
+
     @Override
-    public void seekTo(int i) {
+    public void seekTo(int pos) {
+        musicSrv.seek(pos);
 
     }
 
     @Override
     public boolean isPlaying() {
+        if(musicSrv!=null && musicBound)
+        return musicSrv.isPng();
         return false;
     }
 
@@ -203,21 +248,97 @@ public class MainActivity extends AppCompatActivity implements MediaPlayerContro
 
     @Override
     public boolean canPause() {
-        return false;
+        return true;
     }
 
     @Override
     public boolean canSeekBackward() {
-        return false;
+        return true;
     }
 
     @Override
     public boolean canSeekForward() {
-        return false;
+        return true;
     }
 
     @Override
     public int getAudioSessionId() {
         return 0;
+    }
+
+    //play next
+    private void playNext(){
+        musicSrv.playNext();
+        controller.show(0);
+    }
+
+    //play previous
+    private void playPrev(){
+        musicSrv.playPrev();
+        controller.show(0);
+    }
+
+    private void initializeUI() {
+        mTextDuration = (TextView) findViewById(R.id.tv_duration);
+        mTextSeekto = (TextView) findViewById(R.id.tv_seekto);
+//        Button mPlayButton = (Button) findViewById(R.id.button_play);
+//        Button mPauseButton = (Button) findViewById(R.id.button_pause);
+//        Button mResetButton = (Button) findViewById(R.id.button_reset);
+        mSeekbarAudio = (SeekBar) findViewById(R.id.seekbar_audio);
+
+
+//        mPauseButton.setOnClickListener(
+//                new View.OnClickListener() {
+//                    @Override
+//                    public void onClick(View view) {
+//                        mPlayerAdapter.pause();
+//                    }
+//                });
+//        mPlayButton.setOnClickListener(
+//                new View.OnClickListener() {
+//                    @Override
+//                    public void onClick(View view) {
+//                        mPlayerAdapter.play();
+//                    }
+//                });
+//        mResetButton.setOnClickListener(
+//                new View.OnClickListener() {
+//                    @Override
+//                    public void onClick(View view) {
+//                        mPlayerAdapter.reset();
+//                    }
+//                });
+    }
+
+
+
+    private void initializeSeekbar() {
+        mSeekbarAudio.setOnSeekBarChangeListener(
+                new SeekBar.OnSeekBarChangeListener() {
+                    int userSelectedPosition = 0;
+
+                    @Override
+                    public void onStartTrackingTouch(SeekBar seekBar) {
+                        mUserIsSeeking = true;
+                    }
+
+                    @Override
+                    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                        if (fromUser) {
+                            userSelectedPosition = progress;
+                        }
+                    }
+
+
+                    @Override
+                    public void onStopTrackingTouch(SeekBar seekBar) {
+                        mUserIsSeeking = false;
+                        musicSrv.seek(userSelectedPosition);
+                        mSeekbarAudio.setProgress(getCurrentPosition()*1000,true);
+                        mTextSeekto.setText(getCurrentPosition()*1000+"");
+                    }
+                });
+
+
     }
 }
