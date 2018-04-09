@@ -336,6 +336,7 @@ public class MainActivity extends AppCompatActivity implements MediaPlayerContro
                         musicSrv.seek(userSelectedPosition);
                         mSeekbarAudio.setProgress(getCurrentPosition()*1000,true);
                         mTextSeekto.setText(getCurrentPosition()*1000+"");
+                        https://www.androidhive.info/2012/03/android-building-audio-player-tutorial/
                     }
                 });
 
